@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: lovelink_db
+    restart: always
+    environment:
+      POSTGRES_DB: lovelink_db
+      POSTGRES_USER: lovelink_user
+      POSTGRES_PASSWORD: lovelink_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    container_name: lovelink_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: lovelink_backend
+    restart: always
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py seed_templates &&
+             python manage.py init_admin &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./backend:/app
+      - media_data:/app/media
+    environment:
+      DEBUG: "True"
+      SECRET_KEY: "prod-lovelink-secret-key-change-in-real-production"
+      DATABASE_URL: "postgres://lovelink_user:lovelink_password@db:5432/lovelink_db"
+      CELERY_BROKER_URL: "redis://redis:6379/0"
+      ALLOWED_HOSTS: "*"
+      PUBLIC_APP_URL: "http://localhost:5173"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: lovelink_frontend
+    restart: always
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  media_data:
